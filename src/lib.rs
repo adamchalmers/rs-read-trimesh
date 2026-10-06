@@ -181,6 +181,8 @@ pub fn load_trimesh_with_flags(
         Some("ply") => load_trimesh_from_ply(file_path)?,
         Some("obj") => load_trimesh_from_obj(file_path)?,
         Some("dae") => load_trimesh_from_dae(file_path)?,
+        #[cfg(feature = "gltf")]
+        Some("gltf") | Some("glb") => load_trimesh_from_gltf(file_path)?,
         _ => {
             return Err(format!(
                 "Unsupported file extension for '{}', only .stl, .ply, and .obj are supported.",
