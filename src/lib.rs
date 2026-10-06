@@ -369,6 +369,33 @@ where
     Ok((vertices, indices))
 }
 
+/// Function to load a TriMesh from a GLTF file
+#[cfg(feature = "gltf")]
+fn load_trimesh_from_gltf<V>(gltf_file_path: &str) -> Result<(Vec<V>, Vec<[u32; 3]>), String>
+where
+    V: From<[f32; 3]>,
+{
+    // Load the GLTF file using the `gltf` library
+    let contents = gltf::Gltf::open(gltf_file_path).map_err(|e| {
+        format!(
+            "Failed to load .gltf or .glb file '{}': {}",
+            gltf_file_path, e
+        )
+    })?;
+
+    // Collect vertices and indices
+    let mut vertices = Vec::new();
+    let mut indices = Vec::new();
+
+    for scene in contents.scenes() {
+        for node in scene.nodes() {
+            // idk
+        }
+    }
+
+    Ok((vertices, indices))
+}
+
 /// Function to load a TriMesh from an OBJ file
 fn load_trimesh_from_obj<V>(obj_file_path: &str) -> Result<(Vec<V>, Vec<[u32; 3]>), String>
 where
