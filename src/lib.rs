@@ -185,7 +185,7 @@ pub fn load_trimesh_with_flags(
         Some("gltf") | Some("glb") => load_trimesh_from_gltf(file_path)?,
         _ => {
             return Err(format!(
-                "Unsupported file extension for '{}', only .stl, .ply, .glb, .gltf and .obj are supported.",
+                "Unsupported file extension for '{}', only .stl, .ply and .obj are supported.",
                 file_path
             ));
         }
