@@ -181,9 +181,11 @@ pub fn load_trimesh_with_flags(
         Some("ply") => load_trimesh_from_ply(file_path)?,
         Some("obj") => load_trimesh_from_obj(file_path)?,
         Some("dae") => load_trimesh_from_dae(file_path)?,
+        #[cfg(feature = "gltf")]
+        Some("gltf") | Some("glb") => load_trimesh_from_gltf(file_path)?,
         _ => {
             return Err(format!(
-                "Unsupported file extension for '{}', only .stl, .ply, and .obj are supported.",
+                "Unsupported file extension for '{}', only .stl, .ply and .obj are supported.",
                 file_path
             ));
         }
@@ -376,9 +378,13 @@ where
     V: From<[f32; 3]>,
 {
     // Load the GLTF file using the `gltf` library
-    let contents = gltf::Gltf::open(gltf_file_path).map_err(|e| {
+    let contents = gltf::Gltf::open(gltf_file_path)
+        .map_err(|e| format!("Failed to load file '{}': {}", gltf_file_path, e))?;
+
+    let base = std::path::Path::new(gltf_file_path).parent();
+    let buffers = gltf::import_buffers(&contents.document, base, contents.blob).map_err(|e| {
         format!(
-            "Failed to load .gltf or .glb file '{}': {}",
+            "Failed to load buffers for file '{}': {}",
             gltf_file_path, e
         )
     })?;
@@ -387,13 +393,94 @@ where
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
 
-    for scene in contents.scenes() {
-        for node in scene.nodes() {
-            // idk
+    // GLTF has 1 scene typically
+    let scene = contents
+        .document
+        .default_scene()
+        .or_else(|| contents.document.scenes().next())
+        .ok_or_else(|| format!("No scenes found in glTF file: {gltf_file_path}!"))?;
+
+    const IDENTITY: [[f32; 4]; 4] = [
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ];
+
+    // Traverse scene nodes. Could be using recursion too
+    let mut pending: Vec<(gltf::Node, [[f32; 4]; 4])> =
+        scene.nodes().map(|node| (node, IDENTITY)).collect();
+
+    while let Some((node, parent_mat)) = pending.pop() {
+        let mat = mul_mat4(parent_mat, node.transform().matrix());
+
+        if let Some(mesh) = node.mesh() {
+            for primitive in mesh.primitives() {
+                // Only Triangles, we can add TriangleStrip and TriangleFan support but it's rarely used.
+                if primitive.mode() != gltf::mesh::Mode::Triangles {
+                    continue;
+                }
+
+                let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
+                let Some(positions) = reader.read_positions() else {
+                    // In practice the position attribute exists, but the spec doesn't require it so skip if missing
+                    continue;
+                };
+
+                let index_offset = vertices.len() as u32;
+                let count = positions.len() as u32;
+
+                // Bake world transform into vertex positions
+                vertices.extend(positions.map(|p| transform_vec3(mat, p).into()));
+
+                let flat_indices: Vec<u32> = match reader.read_indices() {
+                    Some(read_indices) => read_indices.into_u32().collect(),
+                    // Create the indices if the geometry has no index buffer
+                    None => (0..count).collect(),
+                };
+
+                // Write indices by walking the indices in groups of three.
+                // Negative scaling (det(mat) < 0) not supported currently, we can implement by flipping the faces so they stay CCW.
+                indices.extend(flat_indices.chunks_exact(3).map(|face| {
+                    [
+                        face[0] + index_offset,
+                        face[1] + index_offset,
+                        face[2] + index_offset,
+                    ]
+                }));
+            }
+        }
+
+        for child in node.children() {
+            pending.push((child, mat));
         }
     }
 
     Ok((vertices, indices))
+}
+
+/// Multiplies two column-major 4x4 matrices, returning `a * b`
+#[cfg(feature = "gltf")]
+fn mul_mat4(a: [[f32; 4]; 4], b: [[f32; 4]; 4]) -> [[f32; 4]; 4] {
+    let mut out = [[0.0; 4]; 4];
+    for c in 0..4 {
+        for r in 0..4 {
+            for k in 0..4 {
+                out[c][r] += a[k][r] * b[c][k];
+            }
+        }
+    }
+    out
+}
+
+/// Transforms a point with a column-major 4x4 matrix.
+#[cfg(feature = "gltf")]
+fn transform_vec3(m: [[f32; 4]; 4], p: [f32; 3]) -> [f32; 3] {
+    [
+        m[0][0] * p[0] + m[1][0] * p[1] + m[2][0] * p[2] + m[3][0],
+        m[0][1] * p[0] + m[1][1] * p[1] + m[2][1] * p[2] + m[3][1],
+        m[0][2] * p[0] + m[1][2] * p[1] + m[2][2] * p[2] + m[3][2],
+    ]
 }
 
 /// Function to load a TriMesh from an OBJ file
