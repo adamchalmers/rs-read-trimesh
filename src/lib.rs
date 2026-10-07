@@ -427,11 +427,27 @@ where
                     continue;
                 };
 
-                let index_offset = vertices.len();
-                let count = positions.len();
+                let index_offset = vertices.len() as u32;
+                let count = positions.len() as u32;
 
-                // Bake world transform into position
+                // Bake world transform into vertex positions
                 vertices.extend(positions.map(|p| transform_vec3(mat, p).into()));
+
+                let flat_indices: Vec<u32> = match reader.read_indices() {
+                    Some(read_indices) => read_indices.into_u32().collect(),
+                    // Create the indices if the geometry has no index buffer
+                    None => (0..count).collect(),
+                };
+
+                // Write indices by walking the indices in groups of threes.
+                // Note: if negative scaling is possible (det(mat) < 0) we can flip the face so it stays CCW
+                indices.extend(flat_indices.chunks_exact(3)
+                    .map(|face| [
+                        face[0] + index_offset,
+                        face[1] + index_offset,
+                        face[2] + index_offset
+                    ]));
+
             }
         }
 
