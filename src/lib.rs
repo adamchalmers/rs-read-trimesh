@@ -393,7 +393,7 @@ where
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
 
-    // GLTF uses 1 scene typically
+    // GLTF has 1 scene typically
     let scene = contents
         .document
         .default_scene()
@@ -415,7 +415,24 @@ where
         let mat = mul_mat4(parent_mat, node.transform().matrix());
 
         if let Some(mesh) = node.mesh() {
-            
+            for primitive in mesh.primitives() {
+                // Only Triangles, we can add TriangleStrip and TriangleFan support but it's rarely used.
+                if primitive.mode() != gltf::mesh::Mode::Triangles {
+                    continue;
+                }
+
+                let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
+                let Some(positions) = reader.read_positions() else {
+                    // In practice the position attribute exists, but the spec doesn't require it so skip if missing
+                    continue;
+                };
+
+                let index_offset = vertices.len();
+                let count = positions.len();
+
+                // Bake world transform into position
+                vertices.extend(positions.map(|p| transform_vec3(mat, p).into()));
+            }
         }
 
         for child in node.children() {
@@ -439,6 +456,16 @@ fn mul_mat4(a: [[f32; 4]; 4], b: [[f32; 4]; 4]) -> [[f32; 4]; 4] {
         }
     }
     out
+}
+
+/// Transforms a point with a colum-major 4x4 matrix.
+#[cfg(feature = "gltf")]
+fn transform_vec3(m: [[f32; 4]; 4], p: [f32; 3]) -> [f32; 3] {
+    [
+        m[0][0] * p[0] + m[1][0] * p[1] + m[2][0] * p[2] + m[3][0],
+        m[0][1] * p[0] + m[1][1] * p[1] + m[2][1] * p[2] + m[3][1],
+        m[0][2] * p[0] + m[1][2] * p[1] + m[2][2] * p[2] + m[3][2],
+    ]
 }
 
 /// Function to load a TriMesh from an OBJ file
