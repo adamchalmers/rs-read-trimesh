@@ -441,13 +441,13 @@ where
 
                 // Write indices by walking the indices in groups of threes.
                 // Note: if negative scaling is possible (det(mat) < 0) we can flip the face so it stays CCW
-                indices.extend(flat_indices.chunks_exact(3)
-                    .map(|face| [
+                indices.extend(flat_indices.chunks_exact(3).map(|face| {
+                    [
                         face[0] + index_offset,
                         face[1] + index_offset,
-                        face[2] + index_offset
-                    ]));
-
+                        face[2] + index_offset,
+                    ]
+                }));
             }
         }
 
@@ -455,7 +455,6 @@ where
             pending.push((child, mat));
         }
     }
-    for node in scene.nodes() {}
 
     Ok((vertices, indices))
 }
