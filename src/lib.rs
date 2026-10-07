@@ -439,7 +439,7 @@ where
                     None => (0..count).collect(),
                 };
 
-                // Write indices by walking the indices in groups of threes.
+                // Write indices by walking the indices in groups of three.
                 // Note: if negative scaling is possible (det(mat) < 0) we can flip the face so it stays CCW
                 indices.extend(flat_indices.chunks_exact(3).map(|face| {
                     [
@@ -459,7 +459,7 @@ where
     Ok((vertices, indices))
 }
 
-/// Multiplies two column-major 4x4 matrices, returning `a * b`
+/// Multiplies two columnn-major 4x4 matrices, returning `a * b`
 #[cfg(feature = "gltf")]
 fn mul_mat4(a: [[f32; 4]; 4], b: [[f32; 4]; 4]) -> [[f32; 4]; 4] {
     let mut out = [[0.0; 4]; 4];
