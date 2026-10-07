@@ -185,7 +185,7 @@ pub fn load_trimesh_with_flags(
         Some("gltf") | Some("glb") => load_trimesh_from_gltf(file_path)?,
         _ => {
             return Err(format!(
-                "Unsupported file extension for '{}', only .stl, .ply, and .obj are supported.",
+                "Unsupported file extension for '{}', only .stl, .ply, .glb, .gltf and .obj are supported.",
                 file_path
             ));
         }
@@ -378,16 +378,16 @@ where
     V: From<[f32; 3]>,
 {
     // Load the GLTF file using the `gltf` library
-    let contents = gltf::Gltf::open(gltf_file_path).map_err(|e| {
+    let contents = gltf::Gltf::open(gltf_file_path)
+        .map_err(|e| format!("Failed to load file '{}': {}", gltf_file_path, e))?;
+
+    let base = std::path::Path::new(gltf_file_path).parent();
+    let buffers = gltf::import_buffers(&contents.document, base, contents.blob).map_err(|e| {
         format!(
-            "Failed to load .gltf or .glb file '{}': {}",
+            "Failed to load buffers for file '{}': {}",
             gltf_file_path, e
         )
     })?;
-
-    let base = std::path::Path::new(gltf_file_path).parent();
-    let buffers =
-        gltf::import_buffers(&contents.document, base, contents.blob).map_err(|e| e.to_string())?;
 
     // Collect vertices and indices
     let mut vertices = Vec::new();
@@ -398,7 +398,7 @@ where
         .document
         .default_scene()
         .or_else(|| contents.document.scenes().next())
-        .ok_or_else(|| format!("No scenes found in glTF file!"))?;
+        .ok_or_else(|| format!("No scenes found in glTF file: {gltf_file_path}!"))?;
 
     const IDENTITY: [[f32; 4]; 4] = [
         [1.0, 0.0, 0.0, 0.0],
@@ -440,7 +440,7 @@ where
                 };
 
                 // Write indices by walking the indices in groups of three.
-                // Note: if negative scaling is possible (det(mat) < 0) we can flip the face so it stays CCW
+                // Negative scaling (det(mat) < 0) not supported currently, we can implement by flipping the faces so they stay CCW.
                 indices.extend(flat_indices.chunks_exact(3).map(|face| {
                     [
                         face[0] + index_offset,
@@ -459,7 +459,7 @@ where
     Ok((vertices, indices))
 }
 
-/// Multiplies two columnn-major 4x4 matrices, returning `a * b`
+/// Multiplies two column-major 4x4 matrices, returning `a * b`
 #[cfg(feature = "gltf")]
 fn mul_mat4(a: [[f32; 4]; 4], b: [[f32; 4]; 4]) -> [[f32; 4]; 4] {
     let mut out = [[0.0; 4]; 4];
@@ -473,7 +473,7 @@ fn mul_mat4(a: [[f32; 4]; 4], b: [[f32; 4]; 4]) -> [[f32; 4]; 4] {
     out
 }
 
-/// Transforms a point with a colum-major 4x4 matrix.
+/// Transforms a point with a column-major 4x4 matrix.
 #[cfg(feature = "gltf")]
 fn transform_vec3(m: [[f32; 4]; 4], p: [f32; 3]) -> [f32; 3] {
     [
