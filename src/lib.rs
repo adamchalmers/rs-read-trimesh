@@ -385,17 +385,60 @@ where
         )
     })?;
 
+    let base = std::path::Path::new(gltf_file_path).parent();
+    let buffers =
+        gltf::import_buffers(&contents.document, base, contents.blob).map_err(|e| e.to_string())?;
+
     // Collect vertices and indices
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
 
-    for scene in contents.scenes() {
-        for node in scene.nodes() {
-            // idk
+    // GLTF uses 1 scene typically
+    let scene = contents
+        .document
+        .default_scene()
+        .or_else(|| contents.document.scenes().next())
+        .ok_or_else(|| format!("No scenes found in glTF file!"))?;
+
+    const IDENTITY: [[f32; 4]; 4] = [
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ];
+
+    // Traverse scene nodes. Could be using recursion too
+    let mut pending: Vec<(gltf::Node, [[f32; 4]; 4])> =
+        scene.nodes().map(|node| (node, IDENTITY)).collect();
+
+    while let Some((node, parent_mat)) = pending.pop() {
+        let mat = mul_mat4(parent_mat, node.transform().matrix());
+
+        if let Some(mesh) = node.mesh() {
+            
+        }
+
+        for child in node.children() {
+            pending.push((child, mat));
         }
     }
+    for node in scene.nodes() {}
 
     Ok((vertices, indices))
+}
+
+/// Multiplies two column-major 4x4 matrices, returning `a * b`
+#[cfg(feature = "gltf")]
+fn mul_mat4(a: [[f32; 4]; 4], b: [[f32; 4]; 4]) -> [[f32; 4]; 4] {
+    let mut out = [[0.0; 4]; 4];
+    for c in 0..4 {
+        for r in 0..4 {
+            for k in 0..4 {
+                out[c][r] += a[k][r] * b[c][k];
+            }
+        }
+    }
+    out
 }
 
 /// Function to load a TriMesh from an OBJ file
