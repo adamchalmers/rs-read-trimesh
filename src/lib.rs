@@ -378,16 +378,20 @@ where
     V: From<[f32; 3]>,
 {
     // Load the GLTF file using the `gltf` library
-    let contents = gltf::Gltf::open(gltf_file_path)
+    let contents = catch_gltf_panic(|| gltf::Gltf::open(gltf_file_path))
+        .and_then(|opened| opened.map_err(|e| e.to_string()))
         .map_err(|e| format!("Failed to load file '{}': {}", gltf_file_path, e))?;
 
     let base = std::path::Path::new(gltf_file_path).parent();
-    let buffers = gltf::import_buffers(&contents.document, base, contents.blob).map_err(|e| {
-        format!(
-            "Failed to load buffers for file '{}': {}",
-            gltf_file_path, e
-        )
-    })?;
+    let buffers =
+        catch_gltf_panic(|| gltf::import_buffers(&contents.document, base, contents.blob))
+            .and_then(|imported| imported.map_err(|e| e.to_string()))
+            .map_err(|e| {
+                format!(
+                    "Failed to load buffers for file '{}': {}",
+                    gltf_file_path, e
+                )
+            })?;
 
     // Collect vertices and indices
     let mut vertices = Vec::new();
@@ -491,6 +495,14 @@ where
     }
 
     Ok((vertices, indices))
+}
+
+/// Runs a call into the `gltf` crate and turns a panic inside it into an error.
+/// gltf 1.4.1 panics on some malformed files instead of returning an error.
+#[cfg(feature = "gltf")]
+fn catch_gltf_panic<T>(call: impl FnOnce() -> T) -> Result<T, String> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(call))
+        .map_err(|_| "the glTF parser panicked on malformed input".to_string())
 }
 
 /// Multiplies two column-major 4x4 matrices, returning `a * b`
