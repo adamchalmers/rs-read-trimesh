@@ -411,7 +411,17 @@ where
     let mut pending: Vec<(gltf::Node, [[f32; 4]; 4])> =
         scene.nodes().map(|node| (node, IDENTITY)).collect();
 
+    let mut visited = std::collections::HashSet::new();
+
     while let Some((node, parent_mat)) = pending.pop() {
+        if !visited.insert(node.index()) {
+            return Err(format!(
+                "Invalid node hierarchy in glTF file '{}': node {} is reachable more than once",
+                gltf_file_path,
+                node.index()
+            ));
+        }
+
         let mat = mul_mat4(parent_mat, node.transform().matrix());
 
         if let Some(mesh) = node.mesh() {
