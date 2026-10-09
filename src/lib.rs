@@ -450,6 +450,14 @@ where
                     None => (0..count).collect(),
                 };
 
+                // Indices must refer to this primitive's own vertices
+                if let Some(invalid) = flat_indices.iter().find(|&&index| index >= count) {
+                    return Err(format!(
+                        "Invalid index {} in glTF file '{}': the primitive has only {} vertices",
+                        invalid, gltf_file_path, count
+                    ));
+                }
+
                 // Write indices by walking the indices in groups of three.
                 // Negative scaling (det(mat) < 0): flip the faces so they stay CCW.
                 indices.extend(flat_indices.chunks_exact(3).map(|face| {
