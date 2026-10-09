@@ -423,6 +423,7 @@ where
         }
 
         let mat = mul_mat4(parent_mat, node.transform().matrix());
+        let mirrored = det_mat3(mat) < 0.0;
 
         if let Some(mesh) = node.mesh() {
             for primitive in mesh.primitives() {
@@ -450,12 +451,13 @@ where
                 };
 
                 // Write indices by walking the indices in groups of three.
-                // Negative scaling (det(mat) < 0) not supported currently, we can implement by flipping the faces so they stay CCW.
+                // Negative scaling (det(mat) < 0): flip the faces so they stay CCW.
                 indices.extend(flat_indices.chunks_exact(3).map(|face| {
+                    let (b, c) = if mirrored { (2, 1) } else { (1, 2) };
                     [
                         face[0] + index_offset,
-                        face[1] + index_offset,
-                        face[2] + index_offset,
+                        face[b] + index_offset,
+                        face[c] + index_offset,
                     ]
                 }));
             }
@@ -491,6 +493,13 @@ fn transform_vec3(m: [[f32; 4]; 4], p: [f32; 3]) -> [f32; 3] {
         m[0][1] * p[0] + m[1][1] * p[1] + m[2][1] * p[2] + m[3][1],
         m[0][2] * p[0] + m[1][2] * p[1] + m[2][2] * p[2] + m[3][2],
     ]
+}
+
+#[cfg(feature = "gltf")]
+fn det_mat3(m: [[f32; 4]; 4]) -> f32 {
+    m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+        + m[0][1] * (m[1][2] * m[2][0] - m[1][0] * m[2][2])
+        + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
 }
 
 /// Function to load a TriMesh from an OBJ file
