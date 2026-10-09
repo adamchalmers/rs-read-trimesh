@@ -434,6 +434,13 @@ where
 
                 let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
                 let Some(positions) = reader.read_positions() else {
+                    // Positions should exist but can't be read (glTF file is broken)
+                    if primitive.get(&gltf::Semantic::Positions).is_some() {
+                        return Err(format!(
+                            "Unreadable vertex positions in glTF file '{}'",
+                            gltf_file_path
+                        ));
+                    }
                     // In practice the position attribute exists, but the spec doesn't require it so skip if missing
                     continue;
                 };
@@ -446,6 +453,13 @@ where
 
                 let flat_indices: Vec<u32> = match reader.read_indices() {
                     Some(read_indices) => read_indices.into_u32().collect(),
+                    // Indices should exist but can't be read (glTF file is broken)
+                    None if primitive.indices().is_some() => {
+                        return Err(format!(
+                            "Unreadable indices in glTF file '{}'",
+                            gltf_file_path
+                        ));
+                    }
                     // Create the indices if the geometry has no index buffer
                     None => (0..count).collect(),
                 };
